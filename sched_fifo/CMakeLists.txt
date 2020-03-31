@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project( default )
+project( fifo )
 find_package( OpenCV REQUIRED )
-add_executable( default default_scheduler.cpp )
-target_link_libraries( default ${OpenCV_LIBS} pthread rt )
+add_executable( fifo sched_fifo.cpp )
+target_link_libraries( fifo ${OpenCV_LIBS} pthread rt )

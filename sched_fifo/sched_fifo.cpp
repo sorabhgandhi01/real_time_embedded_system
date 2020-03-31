@@ -33,12 +33,13 @@ using namespace std;
 
 sem_t sem_F, sem_T1, sem_T2, sem_T3;
 pthread_attr_t frame_sched_attr, t1_sched_attr, t2_sched_attr, t3_sched_attr;
-struct sched_param frame_param, t1_param, t2_param, t3_param;
+struct sched_param frame_param, t1_param, t2_param, t3_param, nrt_param;
 pthread_t frame_thread_id, t1_thread_id, t2_thread_id, t3_thread_id;
 
 double wcet = 0, avg_cet = 0, deadline = 0, jitter = 0;
 clock_t start;
 double cpu_time_used;
+uint32_t max_priority, rc;
 
 Mat src, src_gray;
 Mat dst, detected_edges;
@@ -199,16 +200,16 @@ int main( int argc, char** argv )
   sem_init (&sem_T2, 0, 0);
   sem_init (&sem_T3, 0, 0);
 
-  // pthread_attr_init(&frame_sched_attr);
-  // pthread_attr_init(&t1_sched_attr);
+  pthread_attr_init(&frame_sched_attr);
+  pthread_attr_init(&t1_sched_attr);
   // pthread_attr_init(&t2_sched_attr);
   // pthread_attr_init(&t3_sched_attr);
 
-  // pthread_attr_setinheritsched(&frame_sched_attr, PTHREAD_EXPLICIT_SCHED);
-  // pthread_attr_setschedpolicy(&frame_sched_attr, SCHED_FIFO);
+  pthread_attr_setinheritsched(&frame_sched_attr, PTHREAD_EXPLICIT_SCHED);
+  pthread_attr_setschedpolicy(&frame_sched_attr, SCHED_FIFO);
 
-  // pthread_attr_setinheritsched(&t1_sched_attr, PTHREAD_EXPLICIT_SCHED);
-  // pthread_attr_setschedpolicy(&t1_sched_attr, SCHED_FIFO);
+  pthread_attr_setinheritsched(&t1_sched_attr, PTHREAD_EXPLICIT_SCHED);
+  pthread_attr_setschedpolicy(&t1_sched_attr, SCHED_FIFO);
 
   // pthread_attr_setinheritsched(&t2_sched_attr, PTHREAD_EXPLICIT_SCHED);
   // pthread_attr_setschedpolicy(&t2_sched_attr, SCHED_FIFO);
@@ -216,8 +217,21 @@ int main( int argc, char** argv )
   // pthread_attr_setinheritsched(&t3_sched_attr, PTHREAD_EXPLICIT_SCHED);
   // pthread_attr_setschedpolicy(&t3_sched_attr, SCHED_FIFO);
 
-  // pthread_attr_setschedparam(&frame_sched_attr, &frame_param);
-  // pthread_attr_setschedparam(&t1_sched_attr, &t1_param);
+  max_priority = sched_get_priority_max(SCHED_FIFO);
+  rc = sched_getparam(getpid(), &nrt_param);
+  frame_param.sched_priority = max_priority;
+  t1_param.sched_priority = (max_priority - 1);
+  //fib20_param.sched_priority = (max_priority - 2);
+
+  rc = sched_setscheduler(getpid(), SCHED_FIFO, &frame_param);
+
+  if (rc) {
+  		printf("ERROR; sched_setscheduler rc is %d\n", rc); perror(NULL); 
+		exit(-1);
+   }
+
+  pthread_attr_setschedparam(&frame_sched_attr, &frame_param);
+  pthread_attr_setschedparam(&t1_sched_attr, &t1_param);
   // pthread_attr_setschedparam(&t2_sched_attr, &t2_param);
   // pthread_attr_setschedparam(&t3_sched_attr, &t3_param);
 
@@ -238,20 +252,13 @@ int main( int argc, char** argv )
   // }
 
 
-  // CaptureImage();
-
-  // ThreadHandler();
-
-  // HoughCircle();
-
-  // HoughLine();
   pthread_join(frame_thread_id, NULL);
   pthread_join(t1_thread_id, NULL);
   // pthread_join(t2_thread_id, NULL);
   // pthread_join(t3_thread_id, NULL);
 
-  // pthread_attr_destroy(&frame_sched_attr);
-  // pthread_attr_destroy(&t1_sched_attr);
+  pthread_attr_destroy(&frame_sched_attr);
+  pthread_attr_destroy(&t1_sched_attr);
   // pthread_attr_destroy(&t2_sched_attr);
   // pthread_attr_destroy(&t3_sched_attr);
 
@@ -260,7 +267,7 @@ int main( int argc, char** argv )
   sem_destroy(&sem_T2);
   sem_destroy(&sem_T3);
 
-  //sched_setscheduler(getpid(), SCHED_OTHER, &nrt_param);
+  sched_setscheduler(getpid(), SCHED_OTHER, &nrt_param);
   
   return 0;
 }
