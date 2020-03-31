@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 2.8)
+project( default )
+find_package( OpenCV REQUIRED )
+add_executable( default default_scheduler.cpp )
+target_link_libraries( default ${OpenCV_LIBS} pthread rt )

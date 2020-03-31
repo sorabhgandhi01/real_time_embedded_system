@@ -36,7 +36,9 @@ pthread_attr_t frame_sched_attr, t1_sched_attr, t2_sched_attr, t3_sched_attr;
 struct sched_param frame_param, t1_param, t2_param, t3_param;
 pthread_t frame_thread_id, t1_thread_id, t2_thread_id, t3_thread_id;
 
-double frame_max = 0, t1_max = 0, t2_max = 0, t3_max = 0;
+double wcet = 0, avg_cet = 0, deadline = 0, jitter = 0;
+clock_t start;
+double cpu_time_used;
 
 Mat src, src_gray;
 Mat dst, detected_edges;
@@ -48,9 +50,10 @@ const int kernel_size = 3;
 const char* window_name = "Edge Map";
 
 void *frame_capture_handler (void *arg);
-void *t1_handler (void *arg);
-void *t2_handler (void *arg);
-void *t3_handler (void *arg);
+void *log_handler(void *arg);
+// void *t1_handler (void *arg);
+// void *t2_handler (void *arg);
+// void *t3_handler (void *arg);
 
 static void CannyThreshold(int, void*)
 {
@@ -222,17 +225,17 @@ int main( int argc, char** argv )
     printf("Error creating Frame Capture thread\n");
   }
 
-  if (pthread_create(&t1_thread_id, &t1_sched_attr, t1_handler, NULL) != 0) {
+  if (pthread_create(&t1_thread_id, &t1_sched_attr, log_handler, NULL) != 0) {
     printf("Error creating first transform thread\n");
   }
 
-  if (pthread_create(&t2_thread_id, &t2_sched_attr, t2_handler, NULL) != 0) {
-    printf("Error creating second transform thread\n");
-  }
+  // if (pthread_create(&t2_thread_id, &t2_sched_attr, t2_handler, NULL) != 0) {
+  //   printf("Error creating second transform thread\n");
+  // }
 
-  if (pthread_create(&t3_thread_id, &t2_sched_attr, t3_handler, NULL) != 0) {
-    printf("Error creating third tranform thread\n");
-  }
+  // if (pthread_create(&t3_thread_id, &t2_sched_attr, t3_handler, NULL) != 0) {
+  //   printf("Error creating third tranform thread\n");
+  // }
 
 
   // CaptureImage();
@@ -244,13 +247,13 @@ int main( int argc, char** argv )
   // HoughLine();
   pthread_join(frame_thread_id, NULL);
   pthread_join(t1_thread_id, NULL);
-  pthread_join(t2_thread_id, NULL);
-  pthread_join(t3_thread_id, NULL);
+  // pthread_join(t2_thread_id, NULL);
+  // pthread_join(t3_thread_id, NULL);
 
-  pthread_attr_destroy(&frame_sched_attr);
-  pthread_attr_destroy(&t1_sched_attr);
-  pthread_attr_destroy(&t2_sched_attr);
-  pthread_attr_destroy(&t3_sched_attr);
+  // pthread_attr_destroy(&frame_sched_attr);
+  // pthread_attr_destroy(&t1_sched_attr);
+  // pthread_attr_destroy(&t2_sched_attr);
+  // pthread_attr_destroy(&t3_sched_attr);
 
   sem_destroy(&sem_F);
   sem_destroy(&sem_T1);
@@ -258,11 +261,6 @@ int main( int argc, char** argv )
   sem_destroy(&sem_T3);
 
   //sched_setscheduler(getpid(), SCHED_OTHER, &nrt_param);
-
-  printf("/nThe Worst case execution time for frame capture thread = %f\n", frame_max*1000);
-  printf("The Worst case execution time for first_transform thread = %f\n", t1_max*1000);
-  printf("The Worst case execution time for second_transform thread = %f\n", t2_max*1000);
-  printf("The Worst case execution time for third_transform thread = %f\n", t3_max*1000);
   
   return 0;
 }
@@ -270,9 +268,17 @@ int main( int argc, char** argv )
 
 void *frame_capture_handler (void *arg)
 {
-  clock_t start;
-  double cpu_time_used;
-  int i = 0;
+  int i = 0, j = 0;
+
+  for (i = 0; i < 10; i++)
+  {
+  	CaptureImage();
+    CannyTransform();
+    HoughCircleTranform();
+    HoughLineTransform();
+  }
+
+  i = 0;
 
   while (i < ITERATION)
   {
@@ -281,77 +287,132 @@ void *frame_capture_handler (void *arg)
 
     i++;
     CaptureImage();
+    CannyTransform();
+    HoughCircleTranform();
+    HoughLineTransform();
 
     cpu_time_used = ((double)(clock() - start))/CLOCKS_PER_SEC;
-    printf("\nTime taken for Frame Capture thread in %d interation = %f ms\n", i, (cpu_time_used*1000));
-    frame_max = (cpu_time_used > frame_max ? cpu_time_used : frame_max);
+    cpu_time_used = cpu_time_used * 1000;
+    wcet = (cpu_time_used > wcet ? cpu_time_used : wcet);
+    avg_cet += cpu_time_used;
     
     sem_post(&sem_T1);
   } 
-}
 
-void *t1_handler (void *arg)
-{
-  clock_t start;
-  double cpu_time_used;
-  int i = 0;
-
-  while (i < ITERATION)
-  {
-    start = clock();
-    sem_wait(&sem_T1);
-
-    i++;
-    CannyTransform();
-
-    cpu_time_used = ((double)(clock() - start))/CLOCKS_PER_SEC;
-    printf("Time taken for first_transformation thread in %d iteration = %f ms\n", i, (cpu_time_used*1000));
-    t1_max = (cpu_time_used > t1_max ? cpu_time_used : t1_max);
-
-    sem_post(&sem_T2);
-  } 
-}
-
-void *t2_handler (void *arg)
-{
-  clock_t start;
-  double cpu_time_used;
-  int i = 0;
-
-  while (i < ITERATION)
+  while (j < ITERATION)
   {
     start = clock();
     sem_wait(&sem_T2);
 
-    i++;
+    j++;
+    CaptureImage();
+    CannyTransform();
     HoughCircleTranform();
-
-    cpu_time_used = ((double)(clock() - start))/CLOCKS_PER_SEC;
-    printf("Time taken for second_transformation thread in %d iteration = %f ms\n", i, (cpu_time_used*1000));
-    t2_max = (cpu_time_used > t2_max ? cpu_time_used : t2_max);
-
-    sem_post(&sem_T3);
-  } 
-}
-
-void *t3_handler (void *arg)
-{
-  clock_t start;
-  double cpu_time_used;
-  int i = 0;
-  
-  while (i < ITERATION)
-  {
-    start = clock();
-    sem_wait(&sem_T3);
-
-    i++;
     HoughLineTransform();
 
     cpu_time_used = ((double)(clock() - start))/CLOCKS_PER_SEC;
-    printf("Time taken for third_transformation thread in %d iteration = %f ms\n", i, (cpu_time_used*1000));
-    t3_max = (cpu_time_used > t3_max ? cpu_time_used : t3_max);
-
-    sem_post(&sem_F);
-  } 
+    cpu_time_used = cpu_time_used * 1000;
+    
+    sem_post(&sem_T3);
+  }
 }
+
+void *log_handler(void *arg)
+{
+	int i = 0, j = 0;
+
+	while (i < ITERATION)
+	{
+		sem_wait(&sem_T1);
+
+		i++;
+		printf("Time taken for Frame Capture and transform thread in %d interation = %f ms\n", i, (cpu_time_used));
+
+		sem_post(&sem_F);
+	}
+
+	if (deadline == 0) {
+		deadline = wcet + 10;
+		avg_cet = (avg_cet / ITERATION);
+		printf("\nWCET = %f ms 	AVERAGE CET = %f ms 	deadline = %f ms\n\n", wcet, avg_cet, deadline);
+		sem_post(&sem_T2);
+	}
+
+	while (j < ITERATION)
+	{
+		sem_wait(&sem_T3);
+
+		j++;
+		printf("time = %f ms 	and jitter in iteration %d = %f ms\n", cpu_time_used, i, (cpu_time_used - deadline));
+
+		sem_post(&sem_T2);
+	}
+
+
+}
+
+// void *t1_handler (void *arg)
+// {
+//   clock_t start;
+//   double cpu_time_used;
+//   int i = 0;
+
+//   while (i < ITERATION)
+//   {
+//     start = clock();
+//     sem_wait(&sem_T1);
+
+//     i++;
+//     CannyTransform();
+
+//     cpu_time_used = ((double)(clock() - start))/CLOCKS_PER_SEC;
+//     printf("Time taken for first_transformation thread in %d iteration = %f ms\n", i, (cpu_time_used*1000));
+//     t1_max = (cpu_time_used > t1_max ? cpu_time_used : t1_max);
+
+//     sem_post(&sem_T2);
+//   } 
+// }
+
+// void *t2_handler (void *arg)
+// {
+//   clock_t start;
+//   double cpu_time_used;
+//   int i = 0;
+
+//   while (i < ITERATION)
+//   {
+//     start = clock();
+//     sem_wait(&sem_T2);
+
+//     i++;
+//     HoughCircleTranform();
+
+//     cpu_time_used = ((double)(clock() - start))/CLOCKS_PER_SEC;
+//     printf("Time taken for second_transformation thread in %d iteration = %f ms\n", i, (cpu_time_used*1000));
+//     t2_max = (cpu_time_used > t2_max ? cpu_time_used : t2_max);
+
+//     sem_post(&sem_T3);
+//   } 
+// }
+
+// void *t3_handler (void *arg)
+// {
+//   clock_t start;
+//   double cpu_time_used;
+//   int i = 0;
+  
+//   while (i < ITERATION)
+//   {
+//     start = clock();
+//     sem_wait(&sem_T3);
+
+//     i++;
+//     HoughLineTransform();
+
+//     cpu_time_used = ((double)(clock() - start))/CLOCKS_PER_SEC;
+//     printf("Time taken for third_transformation thread in %d iteration = %f ms\n", i, (cpu_time_used*1000));
+//     t3_max = (cpu_time_used > t3_max ? cpu_time_used : t3_max);
+
+//     sem_post(&sem_F);
+//   } 
+// }
